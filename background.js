@@ -193,6 +193,25 @@ async function initializeStorage() {
   }
 }
 
+async function getWaybackUrl(url) {
+  try {
+    const response = await fetch('https://archive.org/wayback/available?url=' + url);
+    if (!response.ok) {
+      throw new Error('Unable to access Wayback Machine API');
+    }
+    console.log("Retrieved availability info from Wayback Machine API");
+    const data = await response.json();
+    if (data.archived_snapshots.available == 'true'){
+        return data.archived_snapshots.available.url
+    }else{
+        return false;
+    }
+    
+  } catch (error) {
+    console.error('Error:', error.message);
+  }
+}
+
 // initialize storage if empty
 initializeStorage();
 
@@ -200,14 +219,18 @@ initializeStorage();
 browser.runtime.onMessage.addListener((request, sender, sendResponse) => {
   const handleRequest = async () => {
     try {
+      console.log('request: ', request);
       switch (request.action) {
         case 'saveUrl':
           await appendData('newspapersList', request.url);
           return { success: true };
         
         case 'deleteUrl':
-          const removed = await removeData('newspapersList', request.url);
-          return { success: removed };
+          return { success: true };
+
+        case 'thisPageLink':
+          console.log("Received link:", request);
+          return { success: true };
         
         default:
           console.warn('Unknown action:', request.action);

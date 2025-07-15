@@ -11,7 +11,8 @@
   "permissions": [
     "tabs",
     "activeTab",
-    "storage"
+    "storage",
+    "https://archive.org/wayback/available/*"
   ],
 
   "browser_action": {
