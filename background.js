@@ -120,19 +120,61 @@ const defaultNewspapers = [
 
 let allNewspapers = [];
 
-const getData = (thisKey, thisValue) => {
-    browser.storage.local.get(thisKey).then(result => {
-        return result;
+const getData = async (thisKey) => {
+    return browser.storage.local.get(thisKey).then((result) => {
+        console.log('result: ', result);
+        return result[thisKey];
     });
 }
 
-const storeData = (thisKey, thisVal) => {
+const storeData = async (thisKey, thisVal) => {
     browser.storage.local.set({
     thisKey: thisVal,
     }).then(() => {
         console.log("Data saved");
+        return;
     });
 }
+
+const appendData = async (thisKey, newVal) => {
+    const result = await getData(thisKey);
+    let urls = result || [];
+    
+    if (!urls.includes(newVal)) { 
+        urls.push(newVal);
+        console.log('Urls = ', urls);
+        await browser.storage.local.set({
+            [thisKey]: urls
+        });
+        console.log("Data saved");
+    }
+}
+
+const removeData = async (thisKey, valueToRemove) => {
+    try {
+        // Get the current array
+        const result = await getData(thisKey);
+        
+        if (!result) {
+            console.log(`Key '${thisKey}' not found in storage`);
+            return false;
+        }
+
+        // Filter out the value to remove
+        const updatedArray = result.filter(item => item !== valueToRemove);
+
+        // Save the updated array
+        await browser.storage.local.set({
+            [thisKey]: updatedArray
+        });
+
+        console.log(`Successfully removed '${valueToRemove}' from '${thisKey}'`);
+        return true;
+    } catch (error) {
+        console.error(`Error removing data: ${error}`);
+        return false;
+    }
+};
 
 async function initializeStorage() {
   try {
@@ -156,37 +198,28 @@ initializeStorage();
 
 // Handle messages from popup
 browser.runtime.onMessage.addListener((request, sender, sendResponse) => {
-  if (request.action === 'saveUrl') {
-    console.log('got here!');
-    handleSaveUrl(request.url)
-      .then(() => sendResponse({ success: true }))
-      .catch((error) => {
-        console.error('Save URL error:', error);
-        sendResponse({ success: false });
-      });
-    return true;
-  }
-});
-
-async function handleSaveUrl(url) {
-  return new Promise((resolve, reject) => {
-    browser.storage.local.get('newsPapersList', (result) => {
-      const urls = result.newspapersList || [];
-      console.log('newspapers list = ', urls);
-      if (!urls.includes(url)) {
-        urls.push(url);
-        browser.storage.local.set({ newspapersList: urls }, () => {
-          if (browser.runtime.lastError) {
-            reject(browser.runtime.lastError);
-          } else {
-            console.log('URL saved:', url);
-            resolve();
-          }
-        });
-      } else {
-        // URL already exists
-        resolve(); 
+  const handleRequest = async () => {
+    try {
+      switch (request.action) {
+        case 'saveUrl':
+          await appendData('newspapersList', request.url);
+          return { success: true };
+        
+        case 'deleteUrl':
+          const removed = await removeData('newspapersList', request.url);
+          return { success: removed };
+        
+        default:
+          console.warn('Unknown action:', request.action);
+          return { success: false };
       }
-    });
-  });
-}
+    } catch (error) {
+      console.error(`${request.action} error:`, error);
+      return { success: false };
+    }
+  };
+
+  // Handle the async response properly
+  handleRequest().then(sendResponse);
+  return true; // Keep the message channel open for async response
+});

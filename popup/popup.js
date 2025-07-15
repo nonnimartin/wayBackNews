@@ -1,13 +1,24 @@
 document.addEventListener('DOMContentLoaded', () => {
-  const saveUrl   = document.getElementById('save-url');
-  const deleteUrl = document.getElementById('delete-url');
-  const urlInput  = document.getElementById('url-save');
-  const urlDelete = document.getElementById('url-delete');
+  const urlForm = document.getElementById('url-form');
+  const urlInput = document.getElementById('url-input');
+  const saveBtn = document.getElementById('save-btn');
+  const deleteBtn = document.getElementById('delete-btn');
   const statusDiv = document.getElementById('status');
 
-  saveUrl.addEventListener('submit', async (e) => {
-    e.preventDefault();
-    const url = urlInput.value.trim();
+  // Handle both save and delete with button clicks instead of form submit
+  saveBtn.addEventListener('click', handleSave);
+  deleteBtn.addEventListener('click', handleDelete);
+
+  async function handleSave() {
+    await handleUrlAction('saveUrl', 'saved');
+  }
+
+  async function handleDelete() {
+    await handleUrlAction('deleteUrl', 'deleted');
+  }
+
+  async function handleUrlAction(action, actionText) {
+    const url = normalizeUrl(urlInput.value.trim());
     
     if (!url) {
       showStatus('Please enter a URL', 'error');
@@ -15,57 +26,34 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     try {
-      // Validate URL
-      new URL(url);
+      // Basic URL validation
+      new URL(url.includes('://') ? url : `https://${url}`);
       
       // Send to background script
       const response = await browser.runtime.sendMessage({
-        action: 'saveUrl',
+        action: action,
         url: url
       });
       
       if (response.success) {
-        showStatus('URL saved successfully!');
+        showStatus(`URL ${actionText} successfully!`);
         urlInput.value = '';
       } else {
-        showStatus('Failed to save URL', 'error');
+        showStatus(`Failed to ${action} URL`, 'error');
       }
     } catch (err) {
-      showStatus('Invalid URL format', 'error');
-      console.error('Invalid URL:', err);
+      showStatus('Invalid URL', 'error');
+      console.error('URL error:', err);
     }
-  });
+  }
 
-  deleteUrl.addEventListener('submit', async (e) => {
-    e.preventDefault();
-    const url = urlInput.value.trim();
-    
-    if (!url) {
-      showStatus('Please enter a URL', 'error');
-      return;
+  function normalizeUrl(url) {
+    // Add https:// if missing
+    if (!url.includes('://') && !url.startsWith('http')) {
+      url = `https://${url}`;
     }
-
-    try {
-      // Validate URL
-      new URL(url);
-      
-      // Send to background script
-      const response = await browser.runtime.sendMessage({
-        action: 'deleteUrl',
-        url: url
-      });
-      
-      if (response.success) {
-        showStatus('URL saved successfully!');
-        urlInput.value = '';
-      } else {
-        showStatus('Failed to save URL', 'error');
-      }
-    } catch (err) {
-      showStatus('Invalid URL format', 'error');
-      console.error('Invalid URL:', err);
-    }
-  });
+    return url;
+  }
 
   function showStatus(message, type = 'success') {
     statusDiv.textContent = message;
