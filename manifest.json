@@ -12,7 +12,8 @@
     "tabs",
     "activeTab",
     "storage",
-    "https://archive.org/wayback/available/*"
+    "webNavigation",
+    "https://archive.org/*"
   ],
 
   "browser_action": {

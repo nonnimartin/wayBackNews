@@ -65,7 +65,6 @@ const newspaperWebsites = {
     "https://www.timesofindia.com",   // India
     "https://www.chinadaily.com.cn",  // China (English)
     "https://www.asahi.com",          // Japan
-    "https://www.ynetnews.com",       // Israel
     "https://www.dawn.com"            // Pakistan
   ],
   
@@ -193,22 +192,49 @@ async function initializeStorage() {
   }
 }
 
+
 async function getWaybackUrl(url) {
   try {
-    const response = await fetch('https://archive.org/wayback/available?url=' + url);
+    
+    const urlObject = new URL(url);
+    url = urlObject.hostname + urlObject.pathname + urlObject.search + urlObject.hash;
+    console.log('testUrl = ', url);
+
+    console.log('testUrl 2 = ', url);
+
+    const apiUrl = `https://archive.org/wayback/available?url=${url}`;
+    
+    console.log('Fetching archive for:', apiUrl);
+    const response = await fetch(apiUrl);
+    
     if (!response.ok) {
-      throw new Error('Unable to access Wayback Machine API');
+      console.error('API request failed with status:', response.status);
+      return null;
     }
-    console.log("Retrieved availability info from Wayback Machine API");
+
     const data = await response.json();
-    if (data.archived_snapshots.available == 'true'){
-        return data.archived_snapshots.available.url
-    }else{
-        return false;
+    console.log('API Response:', JSON.stringify(data, null, 2));
+
+    // Safely check the response structure
+    if (!data?.archived_snapshots?.closest?.available) {
+      console.log('No archive available for this URL');
+      return null;
     }
+
+    const archiveUrl = data.archived_snapshots.closest.url;
+    
+    // Validate the archive URL
+    if (!archiveUrl || !archiveUrl.includes(url.replace(/^https?:\/\//, ''))) {
+      console.error('Invalid archive URL:', archiveUrl);
+      return null;
+    }
+
+    console.log('Found valid archive:', archiveUrl);
+    return archiveUrl;
     
   } catch (error) {
-    console.error('Error:', error.message);
+    console.error('Error in getWaybackUrl:', error);
+    return null;
   }
 }
 
@@ -219,19 +245,36 @@ initializeStorage();
 browser.runtime.onMessage.addListener((request, sender, sendResponse) => {
   const handleRequest = async () => {
     try {
-      console.log('request: ', request);
       switch (request.action) {
         case 'saveUrl':
           await appendData('newspapersList', request.url);
           return { success: true };
-        
+
         case 'deleteUrl':
           return { success: true };
 
         case 'thisPageLink':
-          console.log("Received link:", request);
-          return { success: true };
-        
+          const url = await getWaybackUrl(request.link);
+          console.log('Archive URL:', url);
+          return { success: !!url, url };
+
+        case 'checkForArchive': {
+          const archiveUrl = await getWaybackUrl(request.link);
+          if (archiveUrl) {
+            try {
+              await browser.tabs.sendMessage(sender.tab.id, {
+                action: 'showArchiveBanner',
+                archiveUrl
+              });
+              return { success: true };
+            } catch (err) {
+              console.error('Error sending message to tab:', err);
+              return { success: false };
+            }
+          }
+          return { success: false };
+        }
+
         default:
           console.warn('Unknown action:', request.action);
           return { success: false };
@@ -242,7 +285,7 @@ browser.runtime.onMessage.addListener((request, sender, sendResponse) => {
     }
   };
 
-  // Handle the async response properly
-  handleRequest().then(sendResponse);
-  return true; // Keep the message channel open for async response
+  // Handle the async response
+  const response = handleRequest();
+  return response;
 });
